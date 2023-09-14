@@ -100,7 +100,7 @@ function eo_get_events($args=array()){
 		$args = array();
 
 	//These are preset to ensure the plugin functions properly
-	$required = array('post_type'=> 'event','suppress_filters'=>false);
+	$required = array('post_type'=> 'event','suppress_filters'=> false );
 
 	//These are the defaults
 	$defaults = array(
@@ -127,9 +127,13 @@ function eo_get_events($args=array()){
 	//Make sure 'false' is passed as integer 0
 	if(strtolower($query_array['showpastevents'])==='false') $query_array['showpastevents']=0;
 
-	if($query_array){
-		$events=get_posts($query_array);
-		return $events;
+  if($query_array){
+
+    $setupQuery = new WP_Query( $query_array );
+    global $wpdb, $eventQuery;
+    $events = $wpdb->get_results( $eventQuery );
+    return $events;
+
 	}
 
 		return null;
@@ -228,14 +232,16 @@ function eo_get_by_postid($post_id,$deprecated=0, $occurrence_id=0){
 function eo_get_the_start( $format = 'd-m-Y', $post_id = 0, $occurrence_id = 0, $deprecated = 0 ) {
 	global $post;
 	$event = $post;
-
+ 
 	if( !empty( $deprecated ) && empty( $occurrence_id ) ){
 		//_deprecated_argument( __FUNCTION__, '3.0.0', 'Fourth argument is depreciated. Please use the third argument, the occurrence ID, available from $post->occurrence_id' );
 		$occurrence_id = $deprecated;
 	}
 
 	$post_id       = (int) ( empty($post_id) ? get_the_ID() : $post_id);
+
 	$occurrence_id = (int) ( empty($occurrence_id) && isset($event->occurrence_id)  ? $event->occurrence_id : $occurrence_id);
+
 	$occurrence    = eo_get_the_occurrence( $post_id, $occurrence_id );
 
 	if ( ! $occurrence ) {
@@ -253,6 +259,7 @@ function eo_get_the_start( $format = 'd-m-Y', $post_id = 0, $occurrence_id = 0, 
 	 * @param int $post_id Post ID of the event
 	 * @param int $occurrence_id  The occurrence ID
 	 */
+ 
 	$formatted_date = apply_filters( 'eventorganiser_get_the_start', eo_format_datetime( $start, $format ), $start, $format, $post_id, $occurrence_id );
 	return $formatted_date;
 }
@@ -264,39 +271,39 @@ function eo_get_the_start( $format = 'd-m-Y', $post_id = 0, $occurrence_id = 0, 
  *
  * @since 3.0.0
  * @package event-date-functions
+ * @param int $post_id
  * @param int $event_id
- * @param int $occurrence_id
  * @return boolean|array False if the occurrence was not found.
  */
-function eo_get_the_occurrence( $event_id, $occurrence_id ) {
+function eo_get_the_occurrence( $post_id, $event_id ) {
 
 	global $wpdb;
 
-	$occurrences = (array) wp_cache_get( 'eventorganiser_occurrences_'.$event_id );
+	$occurrences = (array) wp_cache_get( 'eventorganiser_occurrences_'.$post_id );
 
-	if ( ! isset ( $occurrences[$occurrence_id] ) || empty( $occurrences[$occurrence_id] ) ) {
+	if ( ! isset ( $occurrences[$event_id] ) ) {
 
 		$result = $wpdb->get_row($wpdb->prepare(
 			"SELECT event_id, StartDate,StartTime,EndDate,FinishTime FROM {$wpdb->eo_events}
-			WHERE {$wpdb->eo_events}.post_id=%d AND {$wpdb->eo_events}.event_occurrence=%d ORDER BY StartDate ASC",
-			$event_id,
-			$occurrence_id
+			WHERE {$wpdb->eo_events}.post_id=%d AND {$wpdb->eo_events}.event_id=%d ORDER BY StartDate ASC",
+			$post_id,
+			$event_id
 		));
 
 		if( ! $result ) {
 			return false;
 		}
 
-		$occurrences[$occurrence_id] = array(
+		$occurrences[$event_id] = array(
 			'start' => new DateTime($result->StartDate.' '.$result->StartTime, eo_get_blog_timezone()),
 			'end' => new DateTime($result->EndDate.' '.$result->FinishTime, eo_get_blog_timezone())
 		);
 
-		wp_cache_set( 'eventorganiser_occurrences_'.$event_id, $occurrences );
+		wp_cache_set( 'eventorganiser_occurrences_'.$post_id, $occurrences );
 
 	}
 
-	return $occurrences[$occurrence_id];
+	return $occurrences[$event_id];
 
 }
 

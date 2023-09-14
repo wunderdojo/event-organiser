@@ -43,6 +43,8 @@ add_filter('query_vars', 'eventorganiser_register_query_vars' );
  *
  * @param WP_Query $query The query
  */
+global $eventQuery;
+
 function eventorganiser_pre_get_posts( $query ) {
 
 	//Deprecated, use event-venue instead.
@@ -51,7 +53,7 @@ function eventorganiser_pre_get_posts( $query ) {
 		$query->set( 'event-venue',$venue );
 		$query->set( 'post_type', 'event' );
 	}
-
+  
 	//If the query is for eo-events feed, set post type
 	if ( $query->is_feed( 'eo-events' ) ) {
 		$query->set( 'post_type', 'event' );
@@ -90,6 +92,8 @@ function eventorganiser_pre_get_posts( $query ) {
 	if( ! eventorganiser_is_event_query( $query, true ) )
 		return $query;
 
+	// WP will cast stdClass Object to WP_Object loosing event data if caching is enabled.
+	$query->set('cache_results', false);
 
 	//@see https://github.com/stephenharris/Event-Organiser/issues/30
 	if( $query->is_main_query() ){
@@ -239,11 +243,23 @@ function eventorganiser_pre_get_posts( $query ) {
 	add_filter('posts_where','eventorganiser_events_where',10,2);
 	add_filter('posts_orderby','eventorganiser_sort_events',10,2);
 	add_filter('posts_groupby', 'eventorganiser_event_groupby',10,2);
+
+  add_filter( 'posts_clauses', function( $clauses, $query ){
+
+    global $wpdb, $eventQuery;
+
+    $eventQuery = "SELECT " . $clauses['fields'] . " FROM {$wpdb->prefix}posts" . $clauses['from'] . $clauses['join'] . " WHERE 1=1" . $clauses['where'] . " ORDER BY " . $clauses['orderby'] . " " . $clauses['limits'];
+
+    return $clauses;
+    
+  }, 10, 2 );
+  
 }
+
 add_action( 'pre_get_posts', 'eventorganiser_pre_get_posts', 11 );
 
 //Workaround for https://github.com/stephenharris/Event-Organiser/issues/55,
-add_action( 'pre_get_posts', '__return_false', 10 );
+add_action( 'pre_get_posts', '__return_false', 10);
 
 
 /**
@@ -340,7 +356,6 @@ function eventorganiser_join_tables( $join, $query ) {
 
 	if ( eventorganiser_is_event_query( $query, true ) ) {
 
-		$join .= " LEFT JOIN $wpdb->eo_events ON $wpdb->posts.ID = {$wpdb->eo_events}.post_id ";
 
 		if ( 'series' == $query->get( 'group_events_by' ) ) {
 
@@ -359,6 +374,8 @@ function eventorganiser_join_tables( $join, $query ) {
 				> TIMESTAMP({$wpdb->eo_events}2.StartDate,{$wpdb->eo_events}2.StartTime)";
 		}
 	}
+  $join .= " LEFT JOIN $wpdb->eo_events ON $wpdb->posts.ID = {$wpdb->eo_events}.post_id ";
+
 	return $join;
 }
 
